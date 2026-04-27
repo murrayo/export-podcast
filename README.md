@@ -2,8 +2,6 @@
 
 A small macOS web app that lets you browse and export cached episodes from the Apple Podcasts app.
 
-![Screenshot of the episode browser](https://raw.githubusercontent.com/murrayo/export-podcast/main/docs/screenshot.png)
-
 ## Features
 
 - Browse all locally cached episodes grouped by podcast, sorted by most recent
