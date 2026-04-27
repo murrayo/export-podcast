@@ -148,7 +148,36 @@
       width: 52px; text-align: right; font-size: 0.78rem;
       color: #6e6e73; flex-shrink: 0; font-variant-numeric: tabular-nums;
     }
+    .ep-date {
+      width: 86px; text-align: right; font-size: 0.78rem;
+      color: #6e6e73; flex-shrink: 0; font-variant-numeric: tabular-nums;
+    }
     .ep-title { flex: 1; font-size: 0.9rem; }
+
+    .ep-desc-toggle {
+      background: #e8e8ed;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #3a3a3c;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 3px 8px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .ep-desc-toggle:hover { background: #d0d0d8; color: #0071e3; }
+
+    .ep-description {
+      display: none;
+      padding: 6px 10px 10px calc(10px + 16px + 14px + 86px + 14px + 52px + 14px);
+      font-size: 0.82rem;
+      color: #3a3a3c;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      border-bottom: 1px solid #f0f0f5;
+    }
+    .ep-description.open { display: block; }
 
     input[type="text"].dest-input {
       padding: 8px 14px;
@@ -226,10 +255,19 @@
       </div>
       <ul class="episode-list">
         {% for ep in group.episodes %}
-        <li class="episode-row" data-title="{{ (ep.title or '') | lower }}" data-podcast="{{ podcast | lower }}">
-          <input type="checkbox" name="uuids" value="{{ ep.uuid }}" onchange="updateCount()">
-          <span class="ep-num">{% if ep.episode_num %}E{{ '%04d' | format(ep.episode_num | int) }}{% else %}—{% endif %}</span>
-          <span class="ep-title">{{ ep.title or 'Unknown' }}</span>
+        <li>
+          <div class="episode-row" data-title="{{ (ep.title or '') | lower }}" data-podcast="{{ podcast | lower }}">
+            <input type="checkbox" name="uuids" value="{{ ep.uuid }}" onchange="updateCount()">
+            <span class="ep-date">{{ ep.pub_date_str or '—' }}</span>
+            <span class="ep-num">{% if ep.episode_num %}E{{ '%04d' | format(ep.episode_num | int) }}{% else %}—{% endif %}</span>
+            <span class="ep-title">{{ ep.title or 'Unknown' }}</span>
+            {% if ep.description %}
+            <button type="button" class="ep-desc-toggle" onclick="toggleDesc(this)">Info ▾</button>
+            {% endif %}
+          </div>
+          {% if ep.description %}
+          <div class="ep-description">{{ ep.description }}</div>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -240,7 +278,8 @@
   <div class="footer-bar">
     <label for="destination">Export to:</label>
     <input type="text" name="destination" id="destination" class="dest-input"
-           placeholder="~/Desktop/Podcasts" required>
+           value="~/Downloads/Podcasts" required>
+    <button type="button" class="btn btn-secondary" id="browseBtn" onclick="pickFolder()">Browse…</button>
     <button type="submit" class="btn btn-primary" id="exportBtn">Export selected</button>
   </div>
 </form>
@@ -253,9 +292,15 @@
     document.getElementById('exportBtn').disabled = n === 0;
   }
 
+  function visibleCheckboxes(scope) {
+    return Array.from((scope || document).querySelectorAll('.episode-list > li'))
+      .filter(li => li.style.display !== 'none')
+      .map(li => li.querySelector('input[name="uuids"]'))
+      .filter(Boolean);
+  }
+
   function selectAll() {
-    document.querySelectorAll('.episode-row:not(.hidden) input[name="uuids"]')
-      .forEach(cb => cb.checked = true);
+    visibleCheckboxes().forEach(cb => cb.checked = true);
     updateCount();
   }
 
@@ -265,9 +310,7 @@
   }
 
   function selectGroup(btn) {
-    btn.closest('.podcast-group')
-       .querySelectorAll('.episode-row:not(.hidden) input[name="uuids"]')
-       .forEach(cb => cb.checked = true);
+    visibleCheckboxes(btn.closest('.podcast-group')).forEach(cb => cb.checked = true);
     updateCount();
   }
 
@@ -278,19 +321,41 @@
     updateCount();
   }
 
+  function toggleDesc(btn) {
+    const desc = btn.closest('li').querySelector('.ep-description');
+    const open = desc.classList.toggle('open');
+    btn.textContent = open ? 'Info ▴' : 'Info ▾';
+  }
+
   document.getElementById('searchInput').addEventListener('input', function () {
     const q = this.value.toLowerCase().trim();
     document.querySelectorAll('.podcast-group').forEach(group => {
       let any = false;
-      group.querySelectorAll('.episode-row').forEach(row => {
+      group.querySelectorAll('.episode-list > li').forEach(li => {
+        const row = li.querySelector('.episode-row');
         const match = !q || row.dataset.title.includes(q) || row.dataset.podcast.includes(q);
-        row.classList.toggle('hidden', !match);
+        li.style.display = match ? '' : 'none';
         if (match) any = true;
       });
       group.style.display = any ? '' : 'none';
     });
     updateCount();
   });
+
+  function pickFolder() {
+    const btn = document.getElementById('browseBtn');
+    btn.disabled = true;
+    btn.textContent = 'Choosing…';
+    fetch('/pick-folder', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.path) document.getElementById('destination').value = data.path;
+      })
+      .finally(() => {
+        btn.disabled = false;
+        btn.textContent = 'Browse…';
+      });
+  }
 
   updateCount();
 </script>

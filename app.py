@@ -38,8 +38,10 @@ def get_cached_episodes() -> list[dict]:
                 e.ZSEASONNUMBER         AS season_num,
                 e.ZTITLE                AS title,
                 e.ZUUID                 AS uuid,
-                e.ZASSETURL             AS asset_url,
-                e.ZPUBDATE              AS pub_date
+                e.ZASSETURL                     AS asset_url,
+                e.ZPUBDATE                      AS pub_date,
+                strftime('%Y-%m-%d', e.ZPUBDATE + 978307200, 'unixepoch') AS pub_date_str,
+                e.ZITEMDESCRIPTIONWITHOUTHTML   AS description
             FROM ZMTEPISODE e
             JOIN ZMTPODCAST p ON e.ZPODCAST = p.Z_PK
             WHERE e.ZASSETURL IS NOT NULL
@@ -70,7 +72,7 @@ def build_filename(ep: dict) -> str:
 
 
 def group_by_podcast(episodes: list[dict]) -> dict[str, dict]:
-    """Return {podcast_name: {"art": url, "episodes": [...]}}."""
+    """Return {podcast_name: {"art": url, "episodes": [...]}}, sorted by most recent episode first."""
     groups: dict[str, dict] = {}
     for ep in episodes:
         name = ep["podcast"] or "Unknown"
@@ -78,9 +80,10 @@ def group_by_podcast(episodes: list[dict]) -> dict[str, dict]:
             groups[name] = {
                 "art": artwork_url(ep.get("podcast_art_template"), size=60),
                 "episodes": [],
+                "latest": ep["pub_date"] or 0,
             }
         groups[name]["episodes"].append(ep)
-    return groups
+    return dict(sorted(groups.items(), key=lambda item: item[1]["latest"], reverse=True))
 
 
 @app.route("/")
@@ -128,7 +131,23 @@ def export():
         except OSError as e:
             results.append({"filename": filename, "status": "error", "detail": str(e)})
 
-    return render_template("result.html", error=None, results=results, dest=dest)
+    return render_template("result.html", error=None, results=results, dest=str(dest))
+
+
+@app.route("/pick-folder", methods=["POST"])
+def pick_folder():
+    result = subprocess.run(
+        [
+            "osascript", "-e",
+            'POSIX path of (choose folder with prompt "Choose export destination:")',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    path = result.stdout.strip().rstrip("/")
+    if result.returncode != 0 or not path:
+        return jsonify(path=None)
+    return jsonify(path=path)
 
 
 @app.route("/reveal", methods=["POST"])
@@ -141,4 +160,4 @@ def reveal():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
